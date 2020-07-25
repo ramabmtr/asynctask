@@ -46,12 +46,6 @@ func NewAsyncTaskRunner(ctx context.Context) *baseAsyncTask {
 	}
 }
 
-func (b *baseAsyncTask) recovery() {
-	if r := recover(); r != nil {
-		errorLogger.Println(fmt.Sprintf("panic recovered. message: %v. stacktrace: %s", r, string(debug.Stack())))
-	}
-}
-
 func (b *baseAsyncTask) Wait() error {
 	b.wg.Wait()
 
@@ -77,15 +71,13 @@ func (b *baseAsyncTask) SetFunc(f func(param interface{}) (interface{}, error)) 
 func (r *runner) recovery(chRes chan result) {
 	rc := recover()
 	if rc != nil {
-		errorLogger.Println(fmt.Sprintf("panic recovered. message: %v. stacktrace: %s", rc, string(debug.Stack())))
-
 		select {
 		case <-chRes:
 		case <-r.b.ctx.Done():
 		default:
 			chRes <- result{
 				Resp: nil,
-				Err:  fmt.Errorf("panic: %v", rc),
+				Err:  fmt.Errorf("panic recovered. message: %v. stacktrace: %s", rc, string(debug.Stack())),
 			}
 		}
 	}
@@ -135,7 +127,6 @@ func (r *runner) Do(id string) {
 
 	r.b.wg.Add(1)
 	go func() {
-		defer r.b.recovery()
 		defer r.b.wg.Done()
 
 		if errID != nil {
