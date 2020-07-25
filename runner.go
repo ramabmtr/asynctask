@@ -2,7 +2,6 @@ package asynctask
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"runtime/debug"
 	"sync"
@@ -33,6 +32,7 @@ type (
 	}
 )
 
+// NewAsyncTaskRunner create new asynctask runner instance
 func NewAsyncTaskRunner(ctx context.Context) *baseAsyncTask {
 	ctxNew, cancel := context.WithCancel(ctx)
 	return &baseAsyncTask{
@@ -57,7 +57,7 @@ func (b *baseAsyncTask) Wait() error {
 
 	for id, err := range b.mapErr {
 		if err != nil {
-			return errors.New(fmt.Sprintf("ID %s have an error. Err: %s", id, err.Error()))
+			return fmt.Errorf("ID %s have an error. Err: %s", id, err.Error())
 		}
 	}
 	return nil
@@ -85,7 +85,7 @@ func (r *runner) recovery(chRes chan result) {
 		default:
 			chRes <- result{
 				Resp: nil,
-				Err:  errors.New(fmt.Sprintf("panic: %v", rc)),
+				Err:  fmt.Errorf("panic: %v", rc),
 			}
 		}
 	}
@@ -106,7 +106,7 @@ func (r *runner) processResp(id string, resp interface{}) {
 
 		oldResp, ok := r.b.mapResp[id].([]interface{})
 		if !ok {
-			r.b.mapErr[id] = errors.New("cannot append result. looks like the ID is used before without calling `SetMultiple()`")
+			r.b.mapErr[id] = fmt.Errorf("cannot append result. looks like the ID is used before without calling `SetMultiple()`")
 		}
 
 		resp = append(oldResp, resp)
@@ -128,7 +128,7 @@ func (r *runner) SetMultiple() *runner {
 func (r *runner) Do(id string) {
 	var errID error
 	if r.b.mapID[id] && !r.multiple {
-		errID = errors.New(fmt.Sprintf("ID %s is already used", id))
+		errID = fmt.Errorf("ID %s is already used", id)
 	}
 
 	r.b.mapID[id] = true
