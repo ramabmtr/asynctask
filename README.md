@@ -104,7 +104,7 @@ If you want to run multiple `asynctask` with same ID, you can set with `SetMulti
 This suit for calling `asynctask` inside the loop. The result will be slice of interface.
 
 ```go
-runner := asynctask.NewAsyncTaskRunner(context.Background())
+asyncTask := asynctask.NewAsyncTaskRunner(context.Background())
 for i := 0; i < 10; i++ {
 	asyncTask.NewRunner().SetFunc(func(p interface{}) (interface{}, error) {
 		return "test", nil
