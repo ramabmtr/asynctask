@@ -169,9 +169,13 @@ func (r *Runner) do() {
 		defer r.recovery()
 		resp, err := r.f(r.param)
 
-		chRes <- result{
-			resp: resp,
-			err:  err,
+		select {
+		case <-chRes:
+		default:
+			chRes <- result{
+				resp: resp,
+				err:  err,
+			}
 		}
 	}()
 
