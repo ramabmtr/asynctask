@@ -17,4 +17,5 @@
 # vendor/
 
 .idea/
+bin/
 coverage.txt

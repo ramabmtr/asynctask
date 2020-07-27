@@ -8,82 +8,123 @@ import (
 )
 
 type (
-	baseAsyncTask struct {
-		ctx     context.Context
-		cancel  func()
-		wg      *sync.WaitGroup
-		mutex   *sync.Mutex
-		mapID   map[string]bool
-		mapResp map[string]interface{}
-		mapErr  map[string]error
+	result struct {
+		resp interface{}
+		err  error
 	}
 
-	runner struct {
-		b *baseAsyncTask
+	BaseAsyncTask struct {
+		ctx            context.Context
+		cancel         func()
+		wg             *sync.WaitGroup
+		mutex          *sync.Mutex
+		err            error
+		cancelOnError  bool
+		runnerPoolSize int
+		runners        []*Runner
+		mapResult      map[string]interface{}
+	}
 
+	Runner struct {
+		b        *BaseAsyncTask
+		id       string
 		multiple bool
 		f        func(param interface{}) (interface{}, error)
 		param    interface{}
 	}
-
-	result struct {
-		Resp interface{}
-		Err  error
-	}
 )
 
-// NewAsyncTaskRunner create new asynctask runner instance
-func NewAsyncTaskRunner(ctx context.Context) *baseAsyncTask {
+// NewAsyncTask create new asynctask runner instance
+func NewAsyncTask(ctx context.Context) *BaseAsyncTask {
 	ctxNew, cancel := context.WithCancel(ctx)
-	return &baseAsyncTask{
-		ctx:     ctxNew,
-		cancel:  cancel,
-		wg:      new(sync.WaitGroup),
-		mutex:   new(sync.Mutex),
-		mapID:   make(map[string]bool),
-		mapResp: make(map[string]interface{}),
-		mapErr:  make(map[string]error),
+	return &BaseAsyncTask{
+		ctx:            ctxNew,
+		cancel:         cancel,
+		wg:             new(sync.WaitGroup),
+		mutex:          new(sync.Mutex),
+		cancelOnError:  true,
+		runnerPoolSize: 0,
+		runners:        make([]*Runner, 0),
+		mapResult:      make(map[string]interface{}),
 	}
 }
 
-func (b *baseAsyncTask) Wait() error {
-	b.wg.Wait()
+func (b *BaseAsyncTask) cancelContext() {
+	if b.cancelOnError {
+		b.cancel()
+	}
+}
 
-	for id, err := range b.mapErr {
-		if err != nil {
-			return fmt.Errorf("ID %s have an error. Err: %s", id, err.Error())
+func (b *BaseAsyncTask) SetRunnerPoolSize(size int) *BaseAsyncTask {
+	b.runnerPoolSize = size
+	return b
+}
+
+func (b *BaseAsyncTask) CancelOnError(flag bool) *BaseAsyncTask {
+	b.cancelOnError = flag
+	return b
+}
+
+func (b *BaseAsyncTask) StartAndWait() error {
+	sem := make(chan int, b.runnerPoolSize)
+	mapID := make(map[string]bool)
+	for _, runner := range b.runners {
+		// check runner ID, if runner multiple != true and the ID is exist before,
+		// return error and cancel context
+		if mapID[runner.id] && !runner.multiple {
+			b.cancelContext()
+			b.err = fmt.Errorf("ID %s have been used before without `SetMultiple()`", runner.id)
+			break
 		}
-	}
-	return nil
-}
 
-func (b *baseAsyncTask) GetResult(id string) interface{} {
-	return b.mapResp[id]
-}
+		mapID[runner.id] = true
 
-func (b *baseAsyncTask) SetFunc(f func(param interface{}) (interface{}, error)) *runner {
-	return &runner{
-		b: b,
-		f: f,
-	}
-}
-
-func (r *runner) recovery(chRes chan result) {
-	rc := recover()
-	if rc != nil {
-		select {
-		case <-chRes:
-		case <-r.b.ctx.Done():
-		default:
-			chRes <- result{
-				Resp: nil,
-				Err:  fmt.Errorf("panic recovered. message: %v. stacktrace: %s", rc, string(debug.Stack())),
+		if b.runnerPoolSize > 0 {
+			cont := true
+			select {
+			case <-b.ctx.Done():
+				cont = false
+			default:
+				sem <- 1
+			}
+			if !cont {
+				break
 			}
 		}
+		b.wg.Add(1)
+		go func(runner *Runner) {
+			defer b.wg.Done()
+			if b.runnerPoolSize > 0 {
+				defer func() { <-sem }()
+			}
+			runner.do()
+		}(runner)
+	}
+	b.wg.Wait()
+	return b.err
+}
+
+func (b *BaseAsyncTask) GetResult(id string) interface{} {
+	return b.mapResult[id]
+}
+
+func (b *BaseAsyncTask) NewRunner() *Runner {
+	return &Runner{
+		b: b,
 	}
 }
 
-func (r *runner) processResp(id string, resp interface{}) {
+func (r *Runner) recovery() {
+	rc := recover()
+	if rc != nil {
+		r.b.mutex.Lock()
+		r.b.err = fmt.Errorf("panic recovered. message: %v. stacktrace: %s", rc, string(debug.Stack()))
+		r.b.mutex.Unlock()
+		r.b.cancelContext()
+	}
+}
+
+func (r *Runner) processResp(id string, resp interface{}) {
 	if resp == nil {
 		return
 	}
@@ -92,79 +133,66 @@ func (r *runner) processResp(id string, resp interface{}) {
 	defer r.b.mutex.Unlock()
 
 	if r.multiple {
-		if r.b.mapResp[id] == nil {
-			r.b.mapResp[id] = make([]interface{}, 0)
+		if r.b.mapResult[id] == nil {
+			r.b.mapResult[id] = make([]interface{}, 0)
 		}
 
-		oldResp, ok := r.b.mapResp[id].([]interface{})
+		oldResp, ok := r.b.mapResult[id].([]interface{})
 		if !ok {
-			r.b.mapErr[id] = fmt.Errorf("cannot append result. looks like the ID is used before without calling `SetMultiple()`")
+			r.b.err = fmt.Errorf("cannot append result. looks like the ID is used before without calling `SetMultiple()`")
+			return
 		}
 
 		resp = append(oldResp, resp)
 	}
 
-	r.b.mapResp[id] = resp
+	r.b.mapResult[id] = resp
 }
 
-func (r *runner) SetParam(param interface{}) *runner {
+func (r *Runner) do() {
+	chRes := make(chan result)
+	defer close(chRes)
+
+	go func() {
+		defer r.recovery()
+		resp, err := r.f(r.param)
+
+		chRes <- result{
+			resp: resp,
+			err:  err,
+		}
+	}()
+
+	select {
+	case res := <-chRes:
+		if res.err != nil {
+			r.b.cancelContext()
+			r.b.mutex.Lock()
+			defer r.b.mutex.Unlock()
+			r.b.err = res.err
+			return
+		}
+		r.processResp(r.id, res.resp)
+	case <-r.b.ctx.Done():
+	}
+}
+
+func (r *Runner) SetFunc(f func(param interface{}) (interface{}, error)) *Runner {
+	r.f = f
+	return r
+}
+
+func (r *Runner) SetParam(param interface{}) *Runner {
 	r.param = param
 	return r
 }
 
-func (r *runner) SetMultiple() *runner {
+func (r *Runner) SetMultiple() *Runner {
 	r.multiple = true
 	return r
 }
 
-func (r *runner) Do(id string) {
-	var errID error
-	if r.b.mapID[id] && !r.multiple {
-		errID = fmt.Errorf("ID %s is already used", id)
-	}
-
-	r.b.mapID[id] = true
-
-	r.b.wg.Add(1)
-	go func() {
-		defer r.b.wg.Done()
-
-		if errID != nil {
-			r.b.cancel()
-			r.b.mutex.Lock()
-			defer r.b.mutex.Unlock()
-			r.b.mapErr[id] = errID
-		}
-
-		chRes := make(chan result)
-		defer close(chRes)
-
-		go func() {
-			defer r.recovery(chRes)
-			resp, err := r.f(r.param)
-
-			select {
-			case <-chRes:
-			case <-r.b.ctx.Done():
-			default:
-				chRes <- result{
-					Resp: resp,
-					Err:  err,
-				}
-			}
-		}()
-
-		select {
-		case res := <-chRes:
-			if res.Err != nil {
-				r.b.cancel()
-				r.b.mutex.Lock()
-				defer r.b.mutex.Unlock()
-				r.b.mapErr[id] = res.Err
-				return
-			}
-			r.processResp(id, res.Resp)
-		case <-r.b.ctx.Done():
-		}
-	}()
+func (r *Runner) Register(id string) {
+	r.id = id
+	r.b.runners = append(r.b.runners, r)
 }
