@@ -92,8 +92,6 @@ asyncTask.NewRunner().SetFunc(func(p interface{}) (interface{}, error) {
 	return true, nil
 }).Register("taskID2")
 
-// asynctask.CancelOnError(false)
-
 // this code will return error as soon as the first task return an error
 // it wont wait for second task to complete by default
 // uncomment code below to override this behaviour
