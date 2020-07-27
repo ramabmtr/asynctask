@@ -1,3 +1,7 @@
+// This package aim to simplify goroutine management
+// you can run go routine and get result from it without make [channel](https://golang.org/doc/effective_go.html#channels)
+// or use [waitgroup](https://golang.org/pkg/sync/#WaitGroup). You just define the function and let this package
+// handle the rest for you
 package asynctask
 
 import (

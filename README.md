@@ -36,34 +36,34 @@ import (
 )
 
 func main() {
-	runner := asynctask.NewAsyncTaskRunner(context.Background())
+	asyncTask := asynctask.NewAsyncTask(context.Background())
 
 	// Run first task
-	runner.SetFunc(func(p interface{}) (interface{}, error) {
+	asyncTask.NewRunner().SetFunc(func(p interface{}) (interface{}, error) {
 		time.Sleep(3 * time.Second)
 		return "test1", nil
-	}).Do("taskID1")
+	}).Register("taskID1")
 
 	// Run second task
-	runner.SetFunc(func(p interface{}) (interface{}, error) {
+	asyncTask.NewRunner().SetFunc(func(p interface{}) (interface{}, error) {
 		time.Sleep(5 * time.Second)
 		return true, nil
-	}).Do("taskID2")
+	}).Register("taskID2")
 
 	// Wait all task to complete
-	err := runner.Wait()
+	err := asyncTask.StartAndWait()
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	result1, err := asynctask.ResultString(runner.GetResult("taskID1"))
+	result1, err := asynctask.ResultString(asyncTask.GetResult("taskID1"))
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	result2, err := asynctask.ResultBool(runner.GetResult("taskID2"))
+	result2, err := asynctask.ResultBool(asyncTask.GetResult("taskID2"))
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -74,23 +74,31 @@ func main() {
 }
 ```
 
-`asynctask` will raise error immediately if one of `asynctask` return error
+`asynctask` will raise error immediately if one of `asynctask` return error.
+
+you can override it with `asyncTask.CancelOnError(false)`.
 
 ```go
+asyncTask := asynctask.NewAsyncTask(context.Background())
+
 // Run first task
-runner.SetFunc(func(p interface{}) (interface{}, error) {
+asyncTask.NewRunner().SetFunc(func(p interface{}) (interface{}, error) {
 	return nil, fmt.Errorf("test error")
-}).Do("taskID1")
+}).Register("taskID1")
 
 // Run second task
-runner.SetFunc(func(p interface{}) (interface{}, error) {
+asyncTask.NewRunner().SetFunc(func(p interface{}) (interface{}, error) {
 	time.Sleep(time.Second)
 	return true, nil
-}).Do("taskID2")
+}).Register("taskID2")
+
+// asynctask.CancelOnError(false)
 
 // this code will return error as soon as the first task return an error
-// it wont wait for second task to complete
-err := runner.Wait() // err == test error
+// it wont wait for second task to complete by default
+// uncomment code below to override this behaviour
+// asynctask.CancelOnError(false)
+err := asyncTask.Wait() // err == test error
 ```
 
 If you want to run multiple `asynctask` with same ID, you can set with `SetMultiple()`.
@@ -100,30 +108,31 @@ This suit for calling `asynctask` inside the loop. The result will be slice of i
 ```go
 runner := asynctask.NewAsyncTaskRunner(context.Background())
 for i := 0; i < 10; i++ {
-	runner.SetFunc(func(p interface{}) (interface{}, error) {
+	asyncTask.NewRunner().SetFunc(func(p interface{}) (interface{}, error) {
 		return "test", nil
-	}).SetMultiple().Do("taskID")
+	}).SetMultiple().Register("taskID")
 }
 
 // Wait all task to complete
-err := runner.Wait()
+err := asyncTask.Wait()
 if err != nil {
     fmt.Println(err)
     return
 }
 
-result := runner.GetResult("taskID")
+result := asyncTask.GetResult("taskID")
 fmt.Println(result) // [test test ... test]
 ```
 
 You can also pass param to `asynctask` runner with `SetParam(param interface{})`
 
 ```go
-runner.SetFunc(func(p interface{}) (interface{}, error) {
+asyncTask.NewRunner().SetFunc(func(p interface{}) (interface{}, error) {
     param, ok := p.(string)
     if !ok {
         return nil, fmt.Errorf("param is not string")
     }
     return param, nil
-}).SetParam("param").Do("taskID")
+}).SetParam("param").Register("taskID")
 ```
+[asd](https://golang.org/doc/effective_go.html#channels)
