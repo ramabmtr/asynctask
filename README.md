@@ -6,7 +6,13 @@
 [![GoDoc](https://godoc.org/github.com/ramabmtr/asynctask?status.svg)](https://pkg.go.dev/github.com/ramabmtr/asynctask?tab=doc)
 [![Release](https://img.shields.io/github/release/ramabmtr/asynctask.svg?style=flat-square)](https://github.com/ramabmtr/asynctask/releases)
 
-Golang handy goroutine runner
+Golang handy goroutine runner.
+
+This package aim to simplify goroutine management.
+
+You can run goroutine and get result from it without make [channel](https://golang.org/doc/effective_go.html#channels)
+or use [waitgroup](https://golang.org/pkg/sync/#WaitGroup). Just define the function and let this package
+handle the rest for you.
 
 # Installation
 
@@ -74,7 +80,7 @@ func main() {
 }
 ```
 
-`asynctask` will raise error immediately if one of `asynctask` return error.
+`asynctask` will raise error immediately if one of `runner` return error.
 
 you can override it with `asyncTask.CancelOnError(false)`.
 
@@ -99,9 +105,9 @@ asyncTask.NewRunner().SetFunc(func(p interface{}) (interface{}, error) {
 err := asyncTask.Wait() // err == test error
 ```
 
-If you want to run multiple `asynctask` with same ID, you can set with `SetMultiple()`.
+If you want to run multiple `runner` with same ID, you can set with `SetMultiple()`.
 
-This suit for calling `asynctask` inside the loop. The result will be slice of interface.
+This suit for creating `runner` inside the loop. The result will be slice of interface.
 
 ```go
 asyncTask := asynctask.NewAsyncTaskRunner(context.Background())
@@ -122,7 +128,7 @@ result := asyncTask.GetResult("taskID")
 fmt.Println(result) // [test test ... test]
 ```
 
-You can also pass param to `asynctask` runner with `SetParam(param interface{})`
+You can also pass param to `runner` with `SetParam(param interface{})`
 
 ```go
 asyncTask.NewRunner().SetFunc(func(p interface{}) (interface{}, error) {
@@ -133,4 +139,3 @@ asyncTask.NewRunner().SetFunc(func(p interface{}) (interface{}, error) {
     return param, nil
 }).SetParam("param").Register("taskID")
 ```
-[asd](https://golang.org/doc/effective_go.html#channels)
