@@ -13,6 +13,7 @@ type (
 		err  error
 	}
 
+	// BaseAsyncTask hold the base context for asynctask
 	BaseAsyncTask struct {
 		ctx            context.Context
 		cancel         func()
@@ -25,6 +26,7 @@ type (
 		mapResult      map[string]interface{}
 	}
 
+	// Runner hold the base context for asynctask runner
 	Runner struct {
 		b        *BaseAsyncTask
 		id       string
@@ -55,16 +57,20 @@ func (b *BaseAsyncTask) cancelContext() {
 	}
 }
 
+// SetRunnerPoolSize to set max goroutine can run at the same time
+// goroutine will run as soon as the pool worker ready
 func (b *BaseAsyncTask) SetRunnerPoolSize(size int) *BaseAsyncTask {
 	b.runnerPoolSize = size
 	return b
 }
 
+// CancelOnError is to flag if an error happen, immediately return or not
 func (b *BaseAsyncTask) CancelOnError(flag bool) *BaseAsyncTask {
 	b.cancelOnError = flag
 	return b
 }
 
+// StartAndWait start the asynctask and wait for all task finish
 func (b *BaseAsyncTask) StartAndWait() error {
 	sem := make(chan int, b.runnerPoolSize)
 	mapID := make(map[string]bool)
@@ -104,10 +110,12 @@ func (b *BaseAsyncTask) StartAndWait() error {
 	return b.err
 }
 
+// GetResult is to get result from asynctask by ID
 func (b *BaseAsyncTask) GetResult(id string) interface{} {
 	return b.mapResult[id]
 }
 
+// NewRunner create new asynctask runner
 func (b *BaseAsyncTask) NewRunner() *Runner {
 	return &Runner{
 		b: b,
@@ -177,21 +185,26 @@ func (r *Runner) do() {
 	}
 }
 
+// SetFunc is to set the function that will be executed
 func (r *Runner) SetFunc(f func(param interface{}) (interface{}, error)) *Runner {
 	r.f = f
 	return r
 }
 
+// SetParam is to set param that will be thrown to executed function
 func (r *Runner) SetParam(param interface{}) *Runner {
 	r.param = param
 	return r
 }
 
+// SetMultiple is to set asynctask runner can run multiple times on same ID
+// if runner is set to multiple, the result will become slice of interface
 func (r *Runner) SetMultiple() *Runner {
 	r.multiple = true
 	return r
 }
 
+// Register is to register runner to asynctask
 func (r *Runner) Register(id string) {
 	r.id = id
 	r.b.runners = append(r.b.runners, r)
