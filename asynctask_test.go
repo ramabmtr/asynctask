@@ -9,6 +9,33 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestSafeWriteChan(t *testing.T) {
+	safeCh := newSafeResultChan()
+
+	go func() {
+		safeCh.write(result{"res", nil})
+	}()
+
+	select {
+	case res := <-safeCh.read():
+		assert.NoError(t, res.err)
+		assert.Equal(t, "res", res.resp)
+	}
+
+	safeCh.close()
+
+	// write after close should be not panic
+	go func() {
+		safeCh.write(result{"res", nil})
+	}()
+
+	select {
+	case res := <-safeCh.read():
+		assert.NoError(t, res.err)
+		assert.Nil(t, res.resp)
+	}
+}
+
 func TestAsyncTaskSucceed(t *testing.T) {
 	testID1 := "testID1"
 	testID2 := "testID2"

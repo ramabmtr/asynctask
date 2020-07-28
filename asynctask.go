@@ -56,22 +56,23 @@ func newSafeResultChan() *safeResultChan {
 }
 
 // read from result channel
-func (rp *safeResultChan) read() <-chan result {
-	return rp.chResult
+func (src *safeResultChan) read() <-chan result {
+	return src.chResult
 }
 
 // write to safe write to a channel
-func (rp *safeResultChan) write(data result) {
+func (src *safeResultChan) write(data result) {
 	go func() {
-		rp.mutex.Lock()
-		rp.wg.Add(1)
-		rp.mutex.Unlock()
-		defer rp.wg.Done()
+		src.mutex.Lock()
+		src.wg.Add(1)
+		src.mutex.Unlock()
+		defer src.wg.Done()
 
 		select {
-		case <-rp.chClose:
+		case <-src.chClose:
 			return
-		case rp.chResult <- data:
+		default:
+			src.chResult <- data
 		}
 	}()
 }
@@ -79,14 +80,14 @@ func (rp *safeResultChan) write(data result) {
 // close is for safe close a channel, this func utilize waitgroup to close a channel
 // every write will add 1 delta to waitgroup and when this func called, wait all the waitgroup
 // before closing the channel
-func (rp *safeResultChan) close() {
-	close(rp.chClose)
+func (src *safeResultChan) close() {
+	close(src.chClose)
 
-	rp.mutex.Lock()
-	rp.wg.Wait()
-	rp.mutex.Unlock()
+	src.mutex.Lock()
+	src.wg.Wait()
+	src.mutex.Unlock()
 
-	close(rp.chResult)
+	close(src.chResult)
 }
 
 // NewAsyncTask create new asynctask runner instance
