@@ -1,4 +1,4 @@
-// This package aim to simplify goroutine management
+// Package asynctask aim to simplify goroutine management
 // you can run goroutine and get result from it without make [channel](https://golang.org/doc/effective_go.html#channels)
 // or use [waitgroup](https://golang.org/pkg/sync/#WaitGroup). Just define the function and let this package
 // handle the rest for you
