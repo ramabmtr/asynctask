@@ -4,7 +4,7 @@
 [![Build Status](https://travis-ci.org/ramabmtr/asynctask.svg?branch=master)](https://travis-ci.org/ramabmtr/asynctask)
 [![codecov](https://codecov.io/gh/ramabmtr/asynctask/branch/master/graph/badge.svg)](https://codecov.io/gh/ramabmtr/asynctask)
 [![GoDoc](https://godoc.org/github.com/ramabmtr/asynctask?status.svg)](https://pkg.go.dev/github.com/ramabmtr/asynctask?tab=doc)
-[![Release](https://img.shields.io/github/release/ramabmtr/asynctask.svg?style=flat-square)](https://github.com/ramabmtr/asynctask/releases)
+[![Release](https://img.shields.io/github/v/release/ramabmtr/asynctask?include_prereleases&sort=semver)](https://github.com/ramabmtr/asynctask/releases)
 
 Golang handy goroutine runner.
 
