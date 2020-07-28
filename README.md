@@ -57,6 +57,7 @@ func main() {
 	}).Register("taskID2")
 
 	// Wait all task to complete
+	// if one of runner return error, asynctask will raise that error immediately
 	err := asyncTask.StartAndWait()
 	if err != nil {
 		fmt.Println(err)
@@ -101,7 +102,7 @@ asyncTask.NewRunner().SetFunc(func(p interface{}) (interface{}, error) {
 // this code will return error as soon as the first task return an error
 // it wont wait for second task to complete by default
 // uncomment code below to override this behaviour
-// asynctask.CancelOnError(false)
+// asyncTask.CancelOnError(false)
 err := asyncTask.Wait() // err == test error
 ```
 

@@ -38,7 +38,56 @@ type (
 		f        func(param interface{}) (interface{}, error)
 		param    interface{}
 	}
+
+	safeResultChan struct {
+		chResult chan result
+		chClose  chan bool
+		wg       sync.WaitGroup
+		mutex    sync.Mutex
+	}
 )
+
+// newSafeResultChan return an instance of safeResultChan which provide safe write and close a channel
+func newSafeResultChan() *safeResultChan {
+	return &safeResultChan{
+		chResult: make(chan result),
+		chClose:  make(chan bool),
+	}
+}
+
+// read from result channel
+func (rp *safeResultChan) read() <-chan result {
+	return rp.chResult
+}
+
+// write to safe write to a channel
+func (rp *safeResultChan) write(data result) {
+	go func() {
+		rp.mutex.Lock()
+		rp.wg.Add(1)
+		rp.mutex.Unlock()
+		defer rp.wg.Done()
+
+		select {
+		case <-rp.chClose:
+			return
+		case rp.chResult <- data:
+		}
+	}()
+}
+
+// close is for safe close a channel, this func utilize waitgroup to close a channel
+// every write will add 1 delta to waitgroup and when this func called, wait all the waitgroup
+// before closing the channel
+func (rp *safeResultChan) close() {
+	close(rp.chClose)
+
+	rp.mutex.Lock()
+	rp.wg.Wait()
+	rp.mutex.Unlock()
+
+	close(rp.chResult)
+}
 
 // NewAsyncTask create new asynctask runner instance
 func NewAsyncTask(ctx context.Context) *BaseAsyncTask {
@@ -101,6 +150,7 @@ func (b *BaseAsyncTask) StartAndWait() error {
 				break
 			}
 		}
+
 		b.wg.Add(1)
 		go func(runner *Runner) {
 			defer b.wg.Done()
@@ -162,25 +212,25 @@ func (r *Runner) processResp(id string, resp interface{}) {
 }
 
 func (r *Runner) do() {
-	chRes := make(chan result)
-	defer close(chRes)
+	ch := newSafeResultChan()
+	defer ch.close()
 
 	go func() {
 		defer r.recovery()
 		resp, err := r.f(r.param)
 
 		select {
-		case <-chRes:
+		case <-ch.read():
 		default:
-			chRes <- result{
+			ch.write(result{
 				resp: resp,
 				err:  err,
-			}
+			})
 		}
 	}()
 
 	select {
-	case res := <-chRes:
+	case res := <-ch.read():
 		if res.err != nil {
 			r.b.cancelContext()
 			r.b.mutex.Lock()
