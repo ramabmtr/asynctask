@@ -17,8 +17,8 @@ type (
 		err  error
 	}
 
-	// BaseAsyncTask hold the base context for asynctask
-	BaseAsyncTask struct {
+	// AsyncTask hold the base context for asynctask
+	AsyncTask struct {
 		ctx            context.Context
 		cancel         func()
 		wg             *sync.WaitGroup
@@ -32,7 +32,7 @@ type (
 
 	// Runner hold the base context for asynctask runner
 	Runner struct {
-		b        *BaseAsyncTask
+		b        *AsyncTask
 		id       string
 		multiple bool
 		f        func(param interface{}) (interface{}, error)
@@ -91,9 +91,9 @@ func (src *safeResultChan) close() {
 }
 
 // NewAsyncTask create new asynctask runner instance
-func NewAsyncTask(ctx context.Context) *BaseAsyncTask {
+func NewAsyncTask(ctx context.Context) *AsyncTask {
 	ctxNew, cancel := context.WithCancel(ctx)
-	return &BaseAsyncTask{
+	return &AsyncTask{
 		ctx:            ctxNew,
 		cancel:         cancel,
 		wg:             new(sync.WaitGroup),
@@ -105,7 +105,7 @@ func NewAsyncTask(ctx context.Context) *BaseAsyncTask {
 	}
 }
 
-func (b *BaseAsyncTask) cancelContext() {
+func (b *AsyncTask) cancelContext() {
 	if b.cancelOnError {
 		b.cancel()
 	}
@@ -113,19 +113,19 @@ func (b *BaseAsyncTask) cancelContext() {
 
 // SetRunnerPoolSize to set max goroutine can run at the same time
 // goroutine will run as soon as the pool worker ready
-func (b *BaseAsyncTask) SetRunnerPoolSize(size int) *BaseAsyncTask {
+func (b *AsyncTask) SetRunnerPoolSize(size int) *AsyncTask {
 	b.runnerPoolSize = size
 	return b
 }
 
 // CancelOnError is to flag if an error happen, immediately return or not
-func (b *BaseAsyncTask) CancelOnError(flag bool) *BaseAsyncTask {
+func (b *AsyncTask) CancelOnError(flag bool) *AsyncTask {
 	b.cancelOnError = flag
 	return b
 }
 
 // StartAndWait start the asynctask and wait for all task finish
-func (b *BaseAsyncTask) StartAndWait() error {
+func (b *AsyncTask) StartAndWait() error {
 	sem := make(chan int, b.runnerPoolSize)
 	mapID := make(map[string]bool)
 	for _, runner := range b.runners {
@@ -166,12 +166,12 @@ func (b *BaseAsyncTask) StartAndWait() error {
 }
 
 // GetResult is to get result from asynctask by ID
-func (b *BaseAsyncTask) GetResult(id string) interface{} {
+func (b *AsyncTask) GetResult(id string) interface{} {
 	return b.mapResult[id]
 }
 
 // NewRunner create new asynctask runner
-func (b *BaseAsyncTask) NewRunner() *Runner {
+func (b *AsyncTask) NewRunner() *Runner {
 	return &Runner{
 		b: b,
 	}
