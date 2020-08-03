@@ -276,3 +276,17 @@ func TestAsyncTaskWithLimitedPoolErrorAndCancelContext(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), testErr.Error())
 }
+
+func TestAsyncTaskWithTimeout(t *testing.T) {
+	asyncTask := NewAsyncTask(context.Background())
+
+	asyncTask.NewRunner().SetFunc(func(param interface{}) (interface{}, error) {
+		time.Sleep(100 * time.Millisecond)
+		return "result", nil
+	}).SetTimeout(50 * time.Millisecond).Register("id1")
+
+	err := asyncTask.StartAndWait()
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "time limit")
+}

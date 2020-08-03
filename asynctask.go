@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"runtime/debug"
 	"sync"
+	"time"
 )
 
 type (
@@ -37,6 +38,7 @@ type (
 		multiple bool
 		f        func(param interface{}) (interface{}, error)
 		param    interface{}
+		timeout  time.Duration
 	}
 
 	safeResultChan struct {
@@ -133,8 +135,7 @@ func (b *AsyncTask) StartAndWait() error {
 		// return error and cancel context
 		if mapID[runner.id] && !runner.multiple {
 			b.cancelContext()
-			b.err = fmt.Errorf("ID %s have been used before without `SetMultiple()`", runner.id)
-			break
+			return fmt.Errorf("ID %s have been used before without `SetMultiple()`", runner.id)
 		}
 
 		mapID[runner.id] = true
@@ -187,6 +188,14 @@ func (r *Runner) recovery() {
 	}
 }
 
+func (r *Runner) processErr(err error) {
+	r.b.cancelContext()
+	r.b.mutex.Lock()
+	defer r.b.mutex.Unlock()
+	r.b.err = err
+	return
+}
+
 func (r *Runner) processResp(id string, resp interface{}) {
 	if resp == nil {
 		return
@@ -216,6 +225,13 @@ func (r *Runner) do() {
 	ch := newSafeResultChan()
 	defer ch.close()
 
+	runnerCtx := context.Background()
+	if int64(r.timeout) > 0 {
+		ctx, cancel := context.WithTimeout(r.b.ctx, r.timeout)
+		runnerCtx = ctx
+		defer cancel()
+	}
+
 	go func() {
 		defer r.recovery()
 		resp, err := r.f(r.param)
@@ -233,14 +249,13 @@ func (r *Runner) do() {
 	select {
 	case res := <-ch.read():
 		if res.err != nil {
-			r.b.cancelContext()
-			r.b.mutex.Lock()
-			defer r.b.mutex.Unlock()
-			r.b.err = res.err
+			r.processErr(res.err)
 			return
 		}
 		r.processResp(r.id, res.resp)
 	case <-r.b.ctx.Done():
+	case <-runnerCtx.Done():
+		r.processErr(fmt.Errorf("runner with ID %s reached its time limit", r.id))
 	}
 }
 
@@ -260,6 +275,13 @@ func (r *Runner) SetParam(param interface{}) *Runner {
 // if runner is set to multiple, the result will become slice of interface
 func (r *Runner) SetMultiple() *Runner {
 	r.multiple = true
+	return r
+}
+
+// SetTimeout is to set asynctask runner wait time for func to return result
+// if the func fail to give result before the time limit reached, it will thrown error
+func (r *Runner) SetTimeout(x time.Duration) *Runner {
+	r.timeout = x
 	return r
 }
 
